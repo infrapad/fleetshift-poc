@@ -16,6 +16,7 @@ export const CORE_EXTENSION_DEFAULTS: Record<string, boolean> = {
   "kind-plugin": true,
   "configuration-plugin": false,
   "virtualization-plugin": false,
+  "infrapad-plugin": true,
   "addon-demo-plugin": true,
   "settings-plugin": true,
 };
@@ -29,6 +30,7 @@ export const CORE_EXTENSION_META: Record<string, CoreExtensionMeta> = {
   "kind-plugin": { navSection: "main" },
   "configuration-plugin": { navSection: "main" },
   "virtualization-plugin": { navSection: "main" },
+  "infrapad-plugin": { navSection: "main" },
   "addon-demo-plugin": { navSection: "main" },
   "settings-plugin": { navSection: "bottom" },
 };

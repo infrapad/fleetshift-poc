@@ -192,7 +192,7 @@ func setCacheHeaders(w http.ResponseWriter, path string) {
 	case base == "plugin-registry.json":
 		w.Header().Set("Cache-Control", "no-cache")
 	default:
-		w.Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+		w.Header().Set("Cache-Control", "no-cache")
 	}
 }
 

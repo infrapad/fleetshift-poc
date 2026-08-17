@@ -79,3 +79,8 @@ When running tests, iterate with `go test ./...` (the default suite excludes Doc
 ## FleetShift UI
 
 This is the complete frontend web app for fleetshift. See docs/ui/AGENTS.md for agent instructions.
+
+### IMPORTANT NOTE ON HOT-RELOAD
+
+The developer is usually running `npx nx run web:dev:watch` in the background, that
+live-reloads the changes. Don't run `web:build` explicitly, as it breaks the live-reload feature.

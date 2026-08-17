@@ -436,6 +436,34 @@ const VirtualizationPlugin = new FleetshiftPlugin({
   },
 });
 
+const InfrapadPlugin = new FleetshiftPlugin({
+  extensions: [
+    createModule({
+      id: "documents",
+      label: "Infrapad",
+      component: { $codeRef: "InfrapadDocsModule.default" },
+      icon: { $codeRef: "InfrapadIcon.default" },
+      description:
+        "Browse and manage notes about activities in the infrastructure.",
+      keywords: ["infrapad", "documents", "documentation", "infrastructure"],
+    }),
+  ],
+  sharedModules,
+  entryScriptFilename: "plugins/infrapad/infrapad-plugin.[contenthash].js",
+  pluginManifestFilename: "plugins/infrapad/infrapad-plugin-manifest.json",
+  moduleFederationSettings: mfOverride,
+  pluginMetadata: {
+    name: "infrapad-plugin",
+    version: "0.0.1",
+    exposedModules: {
+      InfrapadDocsModule: p(
+        "./src/plugins/infrapad-plugin/InfrapadDocsModule.tsx",
+      ),
+      InfrapadIcon: p("./src/plugins/infrapad-plugin/InfrapadIcon.tsx"),
+    },
+  },
+});
+
 const AddonDemoPlugin = new FleetshiftPlugin({
   extensions: [
     // --- Cluster providers ---
@@ -750,6 +778,7 @@ const pluginConfigs = [
   { plugin: ConfigurationPlugin, key: "configuration" },
   { plugin: VirtualizationPlugin, key: "virtualization" },
   { plugin: AddonDemoPlugin, key: "addon-demo" },
+  { plugin: InfrapadPlugin, key: "infrapad" },
   { plugin: SettingsPlugin, key: "settings" },
 ] as const;
 

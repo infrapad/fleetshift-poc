@@ -21,6 +21,7 @@ const pluginMeta = [
   { name: "overview-plugin", key: "overview", label: "Overview", persona: "ops" },
   { name: "configuration-plugin", key: "configuration", label: "Configuration", persona: "obs" },
   { name: "virtualization-plugin", key: "virtualization", label: "Virtualization", persona: "obs" },
+  { name: "infrapad-plugin", key: "infrapad", label: "Infrapad", persona: "ops" },
   { name: "addon-demo-plugin", key: "addon-demo", label: "Addon Demo", persona: "obs" },
   { name: "settings-plugin", key: "settings", label: "Settings", persona: "obs" }
 ];
