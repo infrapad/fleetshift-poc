@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { $ } from "zx";
 import { existsSync } from "node:fs";
+import { writeFile } from "node:fs/promises";
 import { resolve } from "node:path";
 import {
   importKeyValueArgs,
@@ -27,7 +28,37 @@ const gcphcpPath = isTruthy(process.env.GCPHCP_ENABLED)
   ? "/etc/fleetshift/gcphcp/gcphcp.yaml"
   : "";
 await $`${resolve(rootDir, "deploy/scripts/render-gcphcp-config.sh")} --output ${resolve(k8sDir, "gcphcp.yaml")}`;
-await $`sh -c ${`printf '%s\n' 'OIDC_ISSUER_URL=${process.env.OIDC_ISSUER_URL}' 'OIDC_UI_CLIENT_ID=${process.env.OIDC_UI_CLIENT_ID || "fleetshift-ui"}' 'OIDC_UI_SCOPE=${process.env.OIDC_UI_SCOPE || "openid profile email"}' 'OIDC_CLI_CLIENT_ID=${process.env.OIDC_CLI_CLIENT_ID}' 'OIDC_RESOURCE_AUDIENCE=${process.env.OIDC_RESOURCE_AUDIENCE || process.env.OIDC_AUDIENCE || "fleetshift"}' 'OIDC_KEY_ENROLLMENT_AUDIENCE=${process.env.OIDC_KEY_ENROLLMENT_AUDIENCE || "fleetshift-signing"}' 'PUBLIC_KEY_CLAIM_EXPR=${process.env.PUBLIC_KEY_CLAIM_EXPR || ""}' 'KEY_REGISTRY_ID=${process.env.KEY_REGISTRY_ID}' 'KEY_REGISTRY_SUBJECT_EXPR=${process.env.KEY_REGISTRY_SUBJECT_EXPR}' 'FLEETSHIFT_LOG_LEVEL=${process.env.FLEETSHIFT_LOG_LEVEL || "info"}' 'FLEETSHIFT_SERVER_ADDONS=${addons}' 'GCPHCP_CONFIG_PATH=${gcphcpPath}' > ${resolve(k8sDir, "config.env")}`}`;
+const configEntries = {
+  OIDC_ISSUER_URL: process.env.OIDC_ISSUER_URL,
+  OIDC_UI_CLIENT_ID: process.env.OIDC_UI_CLIENT_ID || "fleetshift-ui",
+  OIDC_UI_SCOPE: process.env.OIDC_UI_SCOPE || "openid profile email",
+  OIDC_CLI_CLIENT_ID: process.env.OIDC_CLI_CLIENT_ID,
+  OIDC_RESOURCE_AUDIENCE: process.env.OIDC_RESOURCE_AUDIENCE || process.env.OIDC_AUDIENCE || "fleetshift",
+  OIDC_KEY_ENROLLMENT_AUDIENCE: process.env.OIDC_KEY_ENROLLMENT_AUDIENCE || "fleetshift-signing",
+  PUBLIC_KEY_CLAIM_EXPR: process.env.PUBLIC_KEY_CLAIM_EXPR || "",
+  KEY_REGISTRY_ID: process.env.KEY_REGISTRY_ID,
+  KEY_REGISTRY_SUBJECT_EXPR: process.env.KEY_REGISTRY_SUBJECT_EXPR,
+  FLEETSHIFT_LOG_LEVEL: process.env.FLEETSHIFT_LOG_LEVEL || "info",
+  FLEETSHIFT_SERVER_ADDONS: addons,
+  GCPHCP_CONFIG_PATH: gcphcpPath,
+};
+if (process.env.EXTERNAL_UI_CONFIG?.trim()) {
+  let value = process.env.EXTERNAL_UI_CONFIG;
+  // Kustomize's env-file format is line-oriented. Compact multiline JSON
+  // without changing its value; fleetshift serve owns object validation.
+  if (/[\r\n]/.test(value)) {
+    try {
+      value = JSON.stringify(JSON.parse(value));
+    } catch {
+      throw new Error("EXTERNAL_UI_CONFIG must be valid JSON for config.env");
+    }
+  }
+  configEntries.EXTERNAL_UI_CONFIG = value;
+}
+await writeFile(
+  resolve(k8sDir, "config.env"),
+  Object.entries(configEntries).map(([key, value]) => `${key}=${value ?? ""}`).join("\n") + "\n",
+);
 const password = encodeURIComponent(process.env.POSTGRES_PASSWORD);
 await $`sh -c ${`printf '%s\n' 'POSTGRES_USER=${process.env.POSTGRES_USER}' 'POSTGRES_PASSWORD=${process.env.POSTGRES_PASSWORD}' 'POSTGRES_DB=${process.env.POSTGRES_DB}' 'DATABASE_URL=postgres://${process.env.POSTGRES_USER}:${password}@postgres:5432/${process.env.POSTGRES_DB}?sslmode=disable' > ${resolve(k8sDir, "secrets.env")}`}`;
 await $`oc apply -f ${resolve(k8sDir, "namespace.yaml")}`;

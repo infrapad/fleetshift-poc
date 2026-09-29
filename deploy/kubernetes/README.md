@@ -56,8 +56,8 @@ Kustomize generators. Values already exported in the process environment take
 precedence over `.env` (so `GCPHCP_GATEWAY_URL=... npx nx run k8s:deploy` wins).
 
 **`config.env`** (ConfigMap) — OIDC issuer URL, client IDs, audience, key
-enrollment settings, log level, resolved addon list, and optional
-`GCPHCP_CONFIG_PATH`.
+enrollment settings, log level, resolved addon list, optional
+`GCPHCP_CONFIG_PATH`, and optional `EXTERNAL_UI_CONFIG`.
 
 **`secrets.env`** (Secret) — PostgreSQL user, password, database name, and `DATABASE_URL`.
 
@@ -71,6 +71,21 @@ addon list stays `kubernetes`.
 Use the root `.env.template` for the authoritative input keys. The exact
 generated `config.env`, `secrets.env`, and `gcphcp.yaml` shapes are defined by
 `deploy/kubernetes/scripts/deploy.mjs`.
+
+To advertise an InfraPad browser origin, set the optional JSON object in the
+root `.env` (or export it before deploying):
+
+```sh
+export EXTERNAL_UI_CONFIG='{"infrapad":{"origin":"https://infrapad.example"}}'
+npx nx run k8s:deploy
+```
+
+The deploy script includes it in the generated ConfigMap only when nonblank;
+`fleetshift serve` validates it at startup and publishes it as
+`externalConfig` on unauthenticated `GET /api/ui/config`. **This configuration
+is public and must never contain credentials or other secrets.** Nothing is
+advertised by default. InfraPad must be reachable from the browser; this is
+not a server-side proxy.
 
 ## Image Management
 

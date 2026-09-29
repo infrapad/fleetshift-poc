@@ -1,6 +1,7 @@
 package bootstrap_test
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/url"
 	"strings"
@@ -9,6 +10,42 @@ import (
 	"github.com/fleetshift/fleetshift-poc/fleetshift-server/internal/bootstrap"
 	"github.com/fleetshift/fleetshift-poc/fleetshift-server/internal/testutil"
 )
+
+func TestNewConfig_ExternalUIConfig(t *testing.T) {
+	for _, tc := range []struct {
+		name, input, want string
+		invalid           bool
+	}{
+		{name: "unset"},
+		{name: "whitespace", input: " \n\t "},
+		{name: "empty object", input: "{}", want: "{}"},
+		{name: "nested object", input: ` {"infrapad":{"origin":"https://infrapad.example"},"oidc":null} `, want: `{"infrapad":{"origin":"https://infrapad.example"},"oidc":null}`},
+		{name: "malformed", input: `{"secret":"do-not-echo"`, invalid: true},
+		{name: "trailing value", input: `{} true`, invalid: true},
+		{name: "array", input: `[]`, invalid: true},
+		{name: "scalar", input: `"str"`, invalid: true},
+		{name: "null", input: `null`, invalid: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cfg, err := bootstrap.NewConfig(bootstrap.ConfigInput{
+				GRPCAddr: ":50051", HTTPAddr: ":8080", DBPath: bootstrap.DefaultSQLitePath,
+				ExternalUIConfig: tc.input,
+			})
+			if tc.invalid {
+				if err == nil || !strings.Contains(err.Error(), "--external-ui-config") || strings.Contains(err.Error(), "do-not-echo") {
+					t.Fatalf("error = %v, want safe setting-specific rejection", err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(cfg.ExternalUIConfig) != tc.want || (tc.want == "" && cfg.ExternalUIConfig != nil) || (tc.want != "" && !json.Valid(cfg.ExternalUIConfig)) {
+				t.Fatalf("external UI config = %s, want %q", cfg.ExternalUIConfig, tc.want)
+			}
+		})
+	}
+}
 
 func TestNewConfig(t *testing.T) {
 	validCA := testutil.MustCAPEM(t)
@@ -500,6 +537,7 @@ func assertConfigEqual(t *testing.T, got, want bootstrap.Config) {
 		got.OIDCIssuer != want.OIDCIssuer ||
 		got.OIDCUIClientID != want.OIDCUIClientID ||
 		got.OIDCUIScope != want.OIDCUIScope ||
+		string(got.ExternalUIConfig) != string(want.ExternalUIConfig) ||
 		got.OIDCResourceAudience != want.OIDCResourceAudience ||
 		got.OIDCKeyEnrollmentAudience != want.OIDCKeyEnrollmentAudience ||
 		got.OIDCRegistryID != want.OIDCRegistryID ||

@@ -11,6 +11,34 @@ import (
 	"github.com/fleetshift/fleetshift-poc/fleetshift-server/internal/testutil"
 )
 
+func TestServeExternalUIConfigFlagAndEnv(t *testing.T) {
+	t.Setenv("EXTERNAL_UI_CONFIG", `{"infrapad":{"origin":"https://env.example"}}`)
+	for _, tc := range []struct{ name, flag, want string }{
+		{name: "env default", want: `{"infrapad":{"origin":"https://env.example"}}`},
+		{name: "flag override", flag: `{"other":true}`, want: `{"other":true}`},
+		{name: "explicit empty", flag: "  "},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			cmd := newServeCmd()
+			if tc.name != "env default" {
+				if err := cmd.Flags().Set("external-ui-config", tc.flag); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := bootstrap.NewConfig(bootstrap.ConfigInput{
+				GRPCAddr: ":50051", HTTPAddr: ":8080", DBPath: bootstrap.DefaultSQLitePath,
+				ExternalUIConfig: cmd.Flags().Lookup("external-ui-config").Value.String(),
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if string(got.ExternalUIConfig) != tc.want {
+				t.Fatalf("external config = %s, want %s", got.ExternalUIConfig, tc.want)
+			}
+		})
+	}
+}
+
 func TestLoadServeConfig(t *testing.T) {
 	validCA := testutil.MustCAPEM(t)
 	caPath := filepath.Join(t.TempDir(), "oidc-ca.pem")
@@ -102,6 +130,17 @@ func TestLoadServeConfig(t *testing.T) {
 				Database:         bootstrap.SQLite{Path: bootstrap.DefaultSQLitePath},
 				Addons:           []bootstrap.AddonName{bootstrap.AddonGCPHCP},
 				GCPHCPConfigPath: "/env/gcphcp.yaml",
+			},
+		},
+		{
+			name: "external UI object passes through",
+			flags: serveFlags{
+				grpcAddr: ":50051", httpAddr: ":8080", dbPath: bootstrap.DefaultSQLitePath,
+				externalUIConfig: `{"infrapad":{"origin":"https://infrapad.example"}}`,
+			},
+			want: bootstrap.Config{
+				GRPCAddr: ":50051", HTTPAddr: ":8080", Database: bootstrap.SQLite{Path: bootstrap.DefaultSQLitePath},
+				ExternalUIConfig: []byte(`{"infrapad":{"origin":"https://infrapad.example"}}`),
 			},
 		},
 		{
@@ -286,6 +325,7 @@ func assertConfigEqual(t *testing.T, got, want bootstrap.Config) {
 		got.OIDCIssuer != want.OIDCIssuer ||
 		got.OIDCUIClientID != want.OIDCUIClientID ||
 		got.OIDCUIScope != want.OIDCUIScope ||
+		string(got.ExternalUIConfig) != string(want.ExternalUIConfig) ||
 		got.OIDCResourceAudience != want.OIDCResourceAudience ||
 		got.OIDCKeyEnrollmentAudience != want.OIDCKeyEnrollmentAudience ||
 		got.OIDCRegistryID != want.OIDCRegistryID ||

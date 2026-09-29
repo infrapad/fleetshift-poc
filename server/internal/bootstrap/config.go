@@ -8,6 +8,7 @@ package bootstrap
 
 import (
 	"crypto/x509"
+	"encoding/json"
 	"encoding/pem"
 	"fmt"
 	"net"
@@ -114,6 +115,7 @@ type ConfigInput struct {
 	OIDCIssuer                    string
 	OIDCUIClientID                string
 	OIDCUIScope                   string
+	ExternalUIConfig              string // public JSON object for /api/ui/config
 	OIDCResourceAudience          string
 	OIDCKeyEnrollmentAudience     string
 	OIDCRegistryID                string
@@ -146,6 +148,9 @@ type Config struct {
 	// OIDCUIScope is the browser OIDC scope string advertised on /api/ui/config.
 	// Packaging/deploy supplies it; NewConfig does not invent a value.
 	OIDCUIScope string
+	// ExternalUIConfig is a validated public JSON object, or nil when absent.
+	// It is advertised unchanged on the unauthenticated /api/ui/config endpoint.
+	ExternalUIConfig json.RawMessage
 
 	// OIDC AuthMethod policy for empty-store install. Supplied by the serve
 	// caller; NewConfig does not invent values when these are empty.
@@ -186,6 +191,17 @@ func NewConfig(in ConfigInput) (Config, error) {
 		return Config{}, fmt.Errorf("--database-url and --db are mutually exclusive")
 	}
 
+	var externalUIConfig json.RawMessage
+	if raw := strings.TrimSpace(in.ExternalUIConfig); raw != "" {
+		var object map[string]json.RawMessage
+		if err := json.Unmarshal([]byte(raw), &object); err != nil || object == nil {
+			// Never include the JSON or the decoder error: this public field
+			// may have been accidentally populated with sensitive data.
+			return Config{}, fmt.Errorf("--external-ui-config must be a JSON object")
+		}
+		externalUIConfig = json.RawMessage(raw)
+	}
+
 	var database Database
 	switch {
 	case effectiveURL != "":
@@ -209,6 +225,7 @@ func NewConfig(in ConfigInput) (Config, error) {
 		OIDCIssuer:                    strings.TrimSpace(in.OIDCIssuer),
 		OIDCUIClientID:                strings.TrimSpace(in.OIDCUIClientID),
 		OIDCUIScope:                   strings.TrimSpace(in.OIDCUIScope),
+		ExternalUIConfig:              externalUIConfig,
 		OIDCResourceAudience:          strings.TrimSpace(in.OIDCResourceAudience),
 		OIDCKeyEnrollmentAudience:     strings.TrimSpace(in.OIDCKeyEnrollmentAudience),
 		OIDCRegistryID:                strings.TrimSpace(in.OIDCRegistryID),

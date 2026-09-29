@@ -32,6 +32,7 @@ type serveFlags struct {
 	oidcIssuer                    string
 	oidcUIClientID                string
 	oidcUIScope                   string
+	externalUIConfig              string
 	oidcResourceAudience          string
 	oidcKeyEnrollmentAudience     string
 	oidcRegistryID                string
@@ -66,6 +67,7 @@ func newServeCmd() *cobra.Command {
 	cmd.Flags().StringVar(&f.oidcIssuer, "oidc-issuer", os.Getenv("OIDC_ISSUER_URL"), "OIDC issuer URL for empty-store initial AuthMethod install (also seeds UI issuer via AuthMethod)")
 	cmd.Flags().StringVar(&f.oidcUIClientID, "oidc-ui-client-id", os.Getenv("OIDC_UI_CLIENT_ID"), "OIDC client ID for the frontend UI (packaging/deploy supplies; no server default)")
 	cmd.Flags().StringVar(&f.oidcUIScope, "oidc-ui-scope", os.Getenv("OIDC_UI_SCOPE"), "OIDC scope string for the frontend UI (packaging/deploy supplies; no server default)")
+	cmd.Flags().StringVar(&f.externalUIConfig, "external-ui-config", os.Getenv("EXTERNAL_UI_CONFIG"), "public JSON object for unauthenticated /api/ui/config (never put secrets here)")
 	cmd.Flags().StringVar(&f.oidcResourceAudience, "oidc-resource-audience", os.Getenv("OIDC_RESOURCE_AUDIENCE"), "AuthMethod resource/API audience (required when AuthMethod store is empty)")
 	cmd.Flags().StringVar(&f.oidcKeyEnrollmentAudience, "oidc-key-enrollment-audience", os.Getenv("OIDC_KEY_ENROLLMENT_AUDIENCE"), "AuthMethod key-enrollment audience (optional when enrollment is unused)")
 	cmd.Flags().StringVar(&f.oidcRegistryID, "oidc-registry-id", os.Getenv("OIDC_REGISTRY_ID"), "external key registry ID (requires --oidc-registry-subject-expression)")

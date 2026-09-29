@@ -23,6 +23,8 @@ type UIConfigOptions struct {
 	// defaults for either field.
 	OIDCUIClientID string
 	OIDCUIScope    string
+	// ExternalConfig is a validated, public JSON object (nil means absent).
+	ExternalConfig json.RawMessage
 	Logger         *slog.Logger
 	// AuthMiddleware, when non-nil, wraps routes that serve
 	// user-specific data (e.g. /api/ui/user-config → navLayout).
@@ -115,7 +117,7 @@ type oidcConfig struct {
 }
 
 // handleConfig serves GET /api/ui/config: oidc, authConfigured, optional
-// uiOrigin, and plugin bootstrap fields when WebDir is set.
+// uiOrigin, optional public externalConfig, and plugin bootstrap fields when WebDir is set.
 func handleConfig(opts UIConfigOptions) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		oidc := oidcConfig{
@@ -128,6 +130,9 @@ func handleConfig(opts UIConfigOptions) http.HandlerFunc {
 		}
 		if opts.UIOrigin != "" {
 			resp["uiOrigin"] = opts.UIOrigin
+		}
+		if opts.ExternalConfig != nil {
+			resp["externalConfig"] = opts.ExternalConfig
 		}
 
 		if opts.AuthSnapshot != nil {

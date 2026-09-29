@@ -48,6 +48,7 @@ func loadServeConfig(f *serveFlags, sel serveSelections) (bootstrap.Config, erro
 		OIDCIssuer:                    f.oidcIssuer,
 		OIDCUIClientID:                f.oidcUIClientID,
 		OIDCUIScope:                   f.oidcUIScope,
+		ExternalUIConfig:              f.externalUIConfig,
 		OIDCResourceAudience:          f.oidcResourceAudience,
 		OIDCKeyEnrollmentAudience:     f.oidcKeyEnrollmentAudience,
 		OIDCRegistryID:                f.oidcRegistryID,

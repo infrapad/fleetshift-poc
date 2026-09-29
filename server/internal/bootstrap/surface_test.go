@@ -2,6 +2,7 @@ package bootstrap
 
 import (
 	"context"
+	"encoding/json"
 	"io"
 	"net/http"
 	"os"
@@ -263,6 +264,55 @@ func TestExpectedSurface_KindGCPTargetsAndSchemasLive(t *testing.T) {
 		if !found {
 			t.Errorf("missing activated schema type %q", rt)
 		}
+	}
+}
+
+func TestUIHTTP_ExternalConfig(t *testing.T) {
+	webDir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(webDir, "plugin-registry.json"), []byte(`{"plugins":{}}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, input string }{
+		{name: "absent"},
+		{name: "empty", input: `{}`},
+		{name: "infrapad", input: `{"infrapad":{"origin":"https://infrapad.example"},"oidc":{"custom":true},"uiOrigin":"https://wrong.example"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			srv := startTestServerWithConfig(t, ConfigInput{WebDir: webDir, ExternalUIConfig: tc.input})
+			resp, err := (&http.Client{Timeout: 2 * time.Second}).Get("http://" + srv.Endpoints().HTTP.Dial + "/api/ui/config")
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				t.Fatalf("status = %d, want 200", resp.StatusCode)
+			}
+			var body map[string]json.RawMessage
+			if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := body["externalConfig"]; ok != (tc.input != "") {
+				t.Fatalf("externalConfig present = %t, want %t", ok, tc.input != "")
+			}
+			if tc.input != "" && string(body["externalConfig"]) != tc.input {
+				t.Fatalf("externalConfig = %s, want %s", body["externalConfig"], tc.input)
+			}
+			for _, key := range []string{"oidc", "authConfigured", "uiOrigin", "scalprumConfig", "pluginPages", "pluginEntries", "assetsHost"} {
+				if _, ok := body[key]; !ok {
+					t.Errorf("missing FleetShift field %q", key)
+				}
+			}
+			var oidc map[string]json.RawMessage
+			if err := json.Unmarshal(body["oidc"], &oidc); err != nil {
+				t.Fatal(err)
+			}
+			if _, ok := oidc["custom"]; ok || string(oidc["authority"]) != `"https://test-issuer.example"` {
+				t.Errorf("external config must not replace server OIDC: %s", body["oidc"])
+			}
+			if string(body["uiOrigin"]) != `"http://127.0.0.1:0"` || string(body["assetsHost"]) != `"/app"` {
+				t.Errorf("server bootstrap fields changed: uiOrigin=%s assetsHost=%s", body["uiOrigin"], body["assetsHost"])
+			}
+		})
 	}
 }
 

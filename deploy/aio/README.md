@@ -137,6 +137,25 @@ podman run \
   quay.io/stolostron/fleetshift:latest
 ```
 
+## Public external UI configuration (optional)
+
+The AIO container inherits `EXTERNAL_UI_CONFIG` and passes it to
+`fleetshift serve` via its environment. To advertise a browser-facing InfraPad origin:
+
+```bash
+podman run -d \
+  -p 127.0.0.1:8085:8085 \
+  -p 127.0.0.1:50051:50051 \
+  -e EXTERNAL_UI_CONFIG='{"infrapad":{"origin":"https://infrapad.example"}}' \
+  quay.io/stolostron/fleetshift:latest
+```
+
+`fleetshift serve` accepts the same JSON object via `--external-ui-config`
+(the flag overrides the environment). When absent, no `externalConfig` or
+InfraPad origin is advertised. This data is served on **unauthenticated**
+`GET /api/ui/config`: never include credentials or other secrets. Use a
+browser-reachable origin with appropriate HTTPS/CORS for authenticated requests.
+
 ## External issuer (Dex-off)
 
 Presence of `OIDC_ISSUER_URL` skips peer Dex and forwards that issuer into the

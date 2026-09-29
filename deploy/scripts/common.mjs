@@ -90,6 +90,7 @@ export function importKeyValueArgs(args) {
     "OIDC_ISSUER_URL",
     "OIDC_UI_CLIENT_ID",
     "OIDC_UI_SCOPE",
+    "EXTERNAL_UI_CONFIG",
     "OIDC_CLI_CLIENT_ID",
     "OIDC_RESOURCE_AUDIENCE",
     "OIDC_AUDIENCE",

@@ -125,6 +125,7 @@ func registerUIHTTP(topMux *http.ServeMux, deps uiHTTPDeps) error {
 		UIOrigin:       uiOrigin,
 		OIDCUIClientID: deps.cfg.OIDCUIClientID,
 		OIDCUIScope:    deps.cfg.OIDCUIScope,
+		ExternalConfig: deps.cfg.ExternalUIConfig,
 		Logger:         deps.logger,
 		AuthMiddleware: httpAuthn.Wrap,
 		AuthSnapshot:   uiAuthFunc(deps.authMethods),
