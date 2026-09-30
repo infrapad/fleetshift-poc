@@ -31,3 +31,35 @@ The runner sets `BASE_URL` to the branded HTTPS origin. Playwright uses
 `ignoreHTTPSErrors` for the sandbox private CA; do not `update-ca-trust` on
 the host. CI asserts Dex port 5556 is not published.
 
+## Local InfraPad adapter journey (opt-in)
+
+Build `../infrapad/ui`'s `@infrapad/ui` (`cd ../infrapad/ui && npm run build
+--workspace @infrapad/ui`), then install/refresh FleetShift's local file
+package (`npm install --workspace @fleetshift/mock-ui-plugins` from the FleetShift
+root). npm may copy `dist` instead of symlinking it, so reinstall after a
+sibling rebuild if needed. Build FleetShift's plugin with `npx nx run
+plugins:build` when no web watch is running; do not run `web:build` against a
+live watch setup.
+
+Start FleetShift's authenticated HTTPS sandbox with `EXTERNAL_UI_CONFIG` set to
+`{"infrapad":{"origin":"http://localhost:8089"}}` and ensure the *updated*
+InfraPad dummy-auth proxy has been **rebuilt/restarted** on its normal port
+8089 with Go and its database running. Verify the origin appears on
+`/api/ui/config` and `/ui/config` is accessible on that origin. From the
+FleetShift root, run:
+
+```sh
+FLEETSHIFT_INFRAPAD_E2E=1 npx nx run e2e-web:test:ct -- tests/infrapad-adapter.spec.ts --project=chromium
+```
+
+This inferred Playwright target uses the **already running** sandbox (including
+its authenticated setup) rather than rebuilding the AIO image, which would
+disrupt a live web watch. If using another browser-facing InfraPad origin, set
+`FLEETSHIFT_INFRAPAD_ORIGIN` to the same value. The test is skipped without
+`FLEETSHIFT_INFRAPAD_E2E`; normal CI needs neither checkout nor local proxy.
+The journey checks browser-readable `/ui/config` and one real `/v1` bearer
+request, then stubs documents and Prometheus for deterministic rendering. The
+dummy proxy **does not verify** the bearer signature, and this test does not
+prove API authorization or Prometheus authentication. Production TLS/CORS and
+authenticated Prometheus hosting remain separate deployment work.
+

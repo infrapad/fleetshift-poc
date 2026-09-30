@@ -1,5 +1,56 @@
 # fleetshift-poc
 
+## This branch: InfraPad UI integration (local setup)
+
+This branch replaces FleetShift's duplicated InfraPad document pages with the
+**built** `@infrapad/ui` package from a sibling checkout. It does not use the
+published `quay.io/stolostron/fleetshift:latest` image for this feature. Place
+the repositories side by side (`fleetshift/` and `infrapad/` under the same
+parent); FleetShift's core plugin has a local `file:` dependency on
+`../infrapad/ui/packages/ui`. No package registry or cross-repo CI provisioning
+is set up for this prototype.
+
+From the **FleetShift root**, prepare the package before installing/building
+FleetShift. The InfraPad checkout needs the shared-request transport and
+updated dummy-auth CORS proxy from its corresponding work:
+
+```bash
+cd ..
+git clone git@github.com:infrapad/infrapad.git
+(cd ../infrapad/ui && npm ci && npm run build --workspace @infrapad/ui)
+cd fleetshift
+npm install                          # from the FleetShift root; links the local package
+npx nx run plugins:build             # built ESM/types/CSS via the Rspack plugin build
+```
+
+For a local browser journey, start both services (Podman, docker-compose,
+[Task](https://taskfile.dev/), and the usual Go/Node prerequisites are needed):
+
+1. In FleetShift's `.env` (copy `.env.template` if needed), set
+   `EXTERNAL_UI_CONFIG='{"infrapad":{"origin":"http://localhost:8089"}}'`.
+   This is **public** configuration, not a place for secrets. Start the
+   source-built sandbox with `npx nx run pd:dev LOCAL_WEB=true`, then in another
+   terminal run `npx nx run web:dev` to populate/watch `web/`. If the watch is
+   already running, keep it running; don't run `web:build` over it.
+2. In `../infrapad`, run the dev-server API.
+3. Open [https://fleetshift-sandbox.localhost:8085/app](https://fleetshift-sandbox.localhost:8085/app),
+   accept the sandbox certificate warning, sign in as `ops@fleetshift.local` /
+   `fleetshift-ops`, and choose **Infrapad** from navigation. Check
+   `curl -sk https://fleetshift-sandbox.localhost:8085/api/ui/config` for the
+   configured `externalConfig.infrapad.origin` and
+   `curl http://localhost:8089/ui/config` if the module cannot load. The `-k`
+   flag is only for the local sandbox CA.
+
+After editing InfraPad's shared package, rebuild it and reinstall/refresh the
+FleetShift file dependency if npm copied rather than symlinked `dist`; rebuild
+FleetShift's plugins when not running a watch. See
+[InfraPad's development guide](../infrapad/DEVELOPMENT.md) for standalone and
+hot-reload modes, and [the opt-in FleetShift browser journey](e2e/web/README.md#local-infrapad-adapter-journey-opt-in)
+for validation. The dummy proxy forwards a bearer but **does not verify its
+signature**; direct Go `/v1` access remains anonymous. This local flow tests
+browser forwarding/CORS, not production authorization, TLS/CORS, or
+Prometheus authentication.
+
 This repository represents both a **prototype** for a next generation k8s/OpenShift cluster management vision, alongside **individual POCs** for exploration of isolated concepts.
 
 ## Start here
