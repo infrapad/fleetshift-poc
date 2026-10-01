@@ -73,10 +73,13 @@ For read-only container builds, set the read token in `.env`:
 NX_SELF_HOSTED_REMOTE_CACHE_ACCESS_TOKEN=local-read-token
 ```
 
-Standalone build:
+Standalone build (requires a sibling `../infrapad` checkout with a built
+`ui/packages/ui/dist`):
 
 ```sh
 podman build \
+  --ulimit nofile=65536:65536 \
+  --build-context infrapad-ui=../infrapad/ui/packages/ui \
   --build-arg NX_SELF_HOSTED_REMOTE_CACHE_SERVER=http://host.containers.internal:8420 \
   --build-arg NX_SELF_HOSTED_REMOTE_CACHE_ACCESS_TOKEN=local-read-token \
   -f Dockerfile.web .

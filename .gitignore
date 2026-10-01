@@ -67,6 +67,8 @@ keycloak/certs/
 
 # Local podman certificates
 deploy/podman/.certs/
+# Host-only OpenShift Dex OAuth client credentials
+deploy/aio/.local/
 
 # Nx
 .nx/

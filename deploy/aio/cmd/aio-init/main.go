@@ -1,6 +1,6 @@
 // Command aio-init is the AIO packaging initialization helper.
-// It selects Dex-on vs Dex-off by issuer presence, renders sandbox PKI and
-// peer Dex when needed (or forwards an external issuer/CA on Dex-off), and
+// It selects demo Dex, OpenShift-backed Dex, or external OIDC, renders
+// sandbox PKI and peer Dex when needed, and
 // writes the ordinary fleetshift serve argv for s6 to exec.
 package main
 
@@ -53,7 +53,27 @@ func run() error {
 	}
 
 	issuerEnv := strings.TrimSpace(os.Getenv("OIDC_ISSUER_URL"))
-	dexOn := issuerEnv == ""
+	modeEnv, set := os.LookupEnv("OPENSHIFT_DEX_MODE")
+	if set && strings.TrimSpace(modeEnv) == "" {
+		return fmt.Errorf("OPENSHIFT_DEX_MODE must be openshift or demo when set")
+	}
+	mode, err := aioinit.ResolveDexMode(strings.TrimSpace(modeEnv), issuerEnv)
+	if err != nil {
+		return err
+	}
+	dexOn := mode != "external"
+	var connector *aioinit.OpenShiftConnector
+	if mode == "openshift" {
+		connector, err = aioinit.LoadOpenShiftConnector(strings.TrimSpace(os.Getenv("OPENSHIFT_DEX_CONFIG_FILE")))
+		if err != nil {
+			return err
+		}
+	} else if os.Getenv("OPENSHIFT_DEX_CONFIG_FILE") != "" {
+		return fmt.Errorf("OPENSHIFT_DEX_CONFIG_FILE requires OPENSHIFT_DEX_MODE=openshift")
+	}
+	if err := aioinit.CheckAuthMode("/data", mode); err != nil {
+		return err
+	}
 
 	logLevel, err := aioinit.ResolveLogLevel(os.Getenv("LOG_LEVEL"))
 	if err != nil {
@@ -80,15 +100,16 @@ func run() error {
 	}
 
 	if dexOn {
-		if err := enableDex(); err != nil {
-			return err
-		}
 		if err := aioinit.InstallDexConfig(aioinit.DexRenderInput{
 			Issuer:    aioinit.PeerDexIssuer,
 			Endpoints: endpoints,
 			LogLevel:  logLevel,
+			OpenShift: connector,
 		}, aioinit.DefaultDexPaths(), dexUID, dexGID); err != nil {
 			return fmt.Errorf("dex config: %w", err)
+		}
+		if err := enableDex(); err != nil {
+			return err
 		}
 		in.Issuer = aioinit.PeerDexIssuer
 		in.CAFile = sandboxPKI.CACert

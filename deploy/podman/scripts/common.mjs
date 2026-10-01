@@ -1,7 +1,11 @@
 import { $, sleep } from "zx";
-import { dirname, resolve } from "node:path";
+import { dirname, resolve, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
+import { readFileSync } from "node:fs";
+import { readdir, stat } from "node:fs/promises";
+import { parseEnv } from "node:util";
+import { BootstrapError, bootstrapOpenShiftDex } from "./bootstrap-openshift-dex.mjs";
 
 $.verbose = true;
 
@@ -20,6 +24,8 @@ const nxEnvironmentKeys = new Set([
   "DOCKER_HOST",
   "FLEETSHIFT_SERVER_HTTP_PORT",
   "OIDC_ISSUER_URL",
+  "OPENSHIFT_DEX_MODE",
+  "OPENSHIFT_DEX_HOST_DIR",
 ]);
 export function importKeyValueArgs(args) {
   const positional = [];
@@ -77,16 +83,85 @@ export async function ensurePodmanReady() {
   }
 }
 
-export function composeFiles() {
-  // Match compose overlays to the flags accepted by the Nx targets.
+// The compose CLI reads .env, but the launcher needs its mode before invoking
+// compose (and before starting an expensive build). Explicit Nx args / shell
+// env take precedence over .env, as they do for compose interpolation.
+function composeEnvironment(envFile = resolve(rootDir, ".env")) {
+  try {
+    return parseEnv(readFileSync(envFile, "utf8"));
+  } catch (err) {
+    if (err.code === "ENOENT") return {};
+    throw err;
+  }
+}
+
+export function configuredDexMode(env = process.env, envFile) {
+  const fileMode = composeEnvironment(envFile).OPENSHIFT_DEX_MODE;
+  const mode = env.OPENSHIFT_DEX_MODE ?? fileMode ?? "";
+  // env_file values go directly into the container: without the OpenShift
+  // overlay, a CLI demo override would still pass .env's openshift mode.
+  if (fileMode === "openshift" && mode !== "openshift")
+    throw new Error("To return to demo, remove OPENSHIFT_DEX_MODE from .env first");
+  if (mode !== "" && mode !== "demo" && mode !== "openshift")
+    throw new Error("Invalid OPENSHIFT_DEX_MODE; use openshift or omit it for demo Dex");
+  return mode === "openshift" ? "openshift" : "demo";
+}
+
+export function composeFiles(env = process.env, envFile) {
+  // Keep the default volume untouched: the overlay replaces only the /data
+  // mount for OpenShift mode and adds the private read-only connector mount.
   const files = ["-f", resolve(composeDir, "compose.yaml")];
-  if (process.env.DEV === "true")
+  if (env.DEV === "true")
     files.push("-f", resolve(composeDir, "overrides/dev.yaml"));
-  if (process.env.LOCAL_WEB === "true")
+  if (env.LOCAL_WEB === "true")
     files.push("-f", resolve(composeDir, "overrides/local-web.yaml"));
-  if (process.env.NX_CACHE === "true")
+  if (env.NX_CACHE === "true")
     files.push("-f", resolve(composeDir, "overrides/nx-cache.yaml"));
+  if (configuredDexMode(env, envFile) === "openshift")
+    files.push("-f", resolve(composeDir, "overrides/openshift-dex.yaml"));
   return files;
+}
+
+export async function checkOpenShiftDexMount(env = process.env, envFile, bootstrap = bootstrapOpenShiftDex) {
+  if (configuredDexMode(env, envFile) !== "openshift") return;
+  const configured = composeEnvironment(envFile);
+  if (env.OIDC_ISSUER_URL || configured.OIDC_ISSUER_URL)
+    throw new Error("OPENSHIFT_DEX_MODE=openshift conflicts with OIDC_ISSUER_URL; unset it in .env");
+  const hostDir = resolve(composeDir, env.OPENSHIFT_DEX_HOST_DIR ?? configured.OPENSHIFT_DEX_HOST_DIR ?? "../aio/.local/openshift-dex");
+  const invalidMount = () => new Error(`OpenShift Dex requires private connector.json and ca.crt under ${hostDir}; run npx nx run pd:bootstrap-openshift-dex to repair the mount`);
+
+  let firstRun = false;
+  try {
+    const dir = await stat(hostDir);
+    if (!dir.isDirectory() || dir.mode & 0o077) throw invalidMount();
+    firstRun = (await readdir(hostDir)).length === 0;
+  } catch (error) {
+    if (error.code === "ENOENT") firstRun = true;
+    else throw invalidMount();
+  }
+  if (firstRun) {
+    // Only a missing/empty directory is bootstrapped automatically. Never
+    // overwrite partial credentials or repair unsafe permissions implicitly.
+    console.log("==> OpenShift Dex files absent; bootstrapping with the current host oc context");
+    try {
+      await bootstrap({ outputDir: hostDir });
+    } catch (error) {
+      if (error instanceof BootstrapError)
+        throw new Error(`OpenShift Dex bootstrap failed: ${error.message}`);
+      // Do not log arbitrary oc/TLS errors: they may contain credentials.
+      throw new Error("OpenShift Dex bootstrap failed; check the oc context, CA, and cluster permissions");
+    }
+  }
+  try {
+    const dir = await stat(hostDir);
+    if (!dir.isDirectory() || dir.mode & 0o077) throw invalidMount();
+    for (const name of ["connector.json", "ca.crt"]) {
+      const file = await stat(join(hostDir, name));
+      if (!file.isFile() || file.mode & 0o077) throw invalidMount();
+    }
+  } catch {
+    throw invalidMount();
+  }
 }
 
 export function compose(...args) {

@@ -46,7 +46,7 @@ block after readiness (no terminal color codes).
 
 Open https://fleetshift-sandbox.localhost:8085 — the exact path `/` redirects
 to `/app/`. The welcome banner is printed only after `https://fleetshift-sandbox.localhost:8085/readyz`
-returns success. Demo credentials appear only with built-in Dex. Errors still
+returns success. Demo credentials appear only with the default password-backed Dex, not the OpenShift connector. Errors still
 stream beneath the banner if something fails later.
 
 Routing on this origin is prefix-based, not a catch-all into the SPA:
@@ -78,6 +78,75 @@ command publishes IPv4 loopback only. If a supported platform does not fall
 back to IPv4, add a second `[::1]:8085:8085` publish for that platform — never
 replace the scoped bind with `0.0.0.0` or `::`.
 
+### OpenShift login through peer Dex (opt-in, local only)
+
+Use a **new, separate `/data` volume** when switching from demo (or external)
+login. AIO refuses to reuse marked state across OpenShift/demo modes or an
+unmarked existing FleetShift DB for OpenShift. It does not migrate AuthMethods
+or equate old demo identities with cluster users. Do not remove the old volume
+unless you deliberately want to discard it. OpenShift login admits any user
+who authenticates to the selected cluster; groups are reported as claims, **not**
+a FleetShift authorization allowlist. This is not a production policy.
+
+On the host, with the intended `oc` context selected and permissions to
+create a service account and token Secret in its namespace. Run with workspace
+Node dependencies installed (`npm ci` if needed; the helper uses `zx`):
+
+```bash
+npx nx run pd:bootstrap-openshift-dex
+# Or invoke node deploy/podman/scripts/bootstrap-openshift-dex.mjs directly to pass
+# --api-ca-file /path/to/api-ca.crt or --oauth-ca-file /path/to/oauth-ca.crt.
+```
+
+The helper reconciles `fleetshift-dex` and its OAuth redirect annotation for
+`https://fleetshift-sandbox.localhost:8085/idp/callback`. It discovers the
+API origin and OAuth endpoints through the selected context. If the context
+has no CA (including `insecure-skip-tls-verify` contexts), it reads the public
+`kube-root-ca.crt` ConfigMap from `kube-system`, as InfraPad's local bootstrap
+does. The helper verifies the API and OAuth endpoints against the resulting CA
+plus system trust; Dex also verifies TLS. **A CA retrieved through an insecure
+host `oc` context is not independently authenticated** (trust on first use),
+and the host `oc` registration calls still inherit that insecure setting.
+Prefer a verified host context or supply an independently obtained
+`--api-ca-file` when possible. The helper then writes **only** this client's SA-form ID, its
+own token secret, and CA trust to `deploy/aio/.local/openshift-dex/` (ignored,
+mode 0700; files 0600). Keep this directory private. No credential-bearing
+kubeconfig or InfraPad secret enters AIO. Re-run after rotating the SA token or
+changing clusters; restart AIO with a **fresh volume** for a new cluster.
+
+The Compose launcher can bootstrap on first use: select the intended `oc`
+context, set `OPENSHIFT_DEX_MODE=openshift` in the repository-root `.env`, and
+run `npx nx run pd:dev`. If the private directory is absent/empty, it runs the
+host bootstrap before building; otherwise it reuses the existing files (and
+rejects partial/unsafe mounts). It selects a separate OpenShift data volume
+and the read-only connector mount automatically; see
+[deploy/podman/README.md](../podman/README.md#openshift-backed-dex-with-pddev).
+For a standalone container instead:
+
+```bash
+podman volume create fleetshift-openshift-data
+podman run --name fleetshift-openshift \
+  -p 127.0.0.1:8085:8085 -p 127.0.0.1:50051:50051 \
+  -v fleetshift-openshift-data:/data \
+  -v "$(pwd)/deploy/aio/.local/openshift-dex:/run/fleetshift/openshift-dex:ro,Z" \
+  -e OPENSHIFT_DEX_MODE=openshift \
+  -e OPENSHIFT_DEX_CONFIG_FILE=/run/fleetshift/openshift-dex/connector.json \
+  quay.io/stolostron/fleetshift:latest
+```
+
+Run from the repository root, or use an absolute host path. On systems without
+SELinux, omit `,Z` if unsupported. The private host directory is read by
+`aio-init` as root; Dex runs as UID 1001 and reads a separate 0600 generated
+config that it owns. Do not mount that config publicly. Missing, permissive,
+or malformed input and untrusted CA fail startup, never fall back to demo.
+The browser must trust/accept the AIO sandbox certificate at the public
+origin (see above); that certificate is **not** the cluster CA. Dex stays the
+OIDC issuer, including for the UI, API bearer verification, and `fleetctl`.
+The Dex connector OAuth client cannot provide a user OpenShift bearer for
+InfraPad or Thanos; that requires a separate client and flow. `fleetctl` uses
+the same Dex-on setup below; log in with your OpenShift account instead of the
+demo email/password.
+
 ### Demo users (Dex-on)
 
 Public sandbox fixtures (not production credentials). Login identifier is the
@@ -99,6 +168,7 @@ surface (`.env` / `KEY_REGISTRY_*`); do not mix the two.
 | Mode | You must set |
 |---|---|
 | Dex-on (default) | nothing |
+| OpenShift-backed Dex | `OPENSHIFT_DEX_MODE=openshift` and `OPENSHIFT_DEX_CONFIG_FILE` (private read-only mount above); no `OIDC_ISSUER_URL` |
 | Dex-off | `OIDC_ISSUER_URL` |
 | Dex-off + GCP HCP | `OIDC_ISSUER_URL` and `GCPHCP_GATEWAY_URL` (or `GCPHCP_CONFIG`) |
 | Kind | a live engine socket mounted at `CONTAINER_HOST` |
@@ -295,7 +365,8 @@ fleetctl auth inspect-token   # aud should include fleetshift (and fleetshift-cl
 fleetctl deployments list
 ```
 
-`auth login` opens a browser to Dex; sign in with a demo user above. Omit the
+`auth login` opens a browser to Dex; sign in with a demo user by default or
+with your cluster user in OpenShift-backed mode. Omit the
 `audience:server:client_id:fleetshift` scope and API calls fail with `aud` not
 satisfied (`fleetshift-cli` only).
 
@@ -340,6 +411,9 @@ source format:
   `/run/fleetshift/dex.enabled`; the `dex` longrun execs peer Dex on
   loopback HTTP; `aio-proxy` serves `https://fleetshift-sandbox.localhost:8085`;
   packaging wires AuthMethod/UI defaults into serve.
+- **OpenShift-backed Dex:** explicit `OPENSHIFT_DEX_MODE=openshift`, no external issuer;
+  same public Dex issuer, routing, and OIDC clients, with only an OpenShift
+  connector (no demo password DB). A fresh `/data` volume is required.
 - **Dex-off:** `OIDC_ISSUER_URL` set. No `dex.enabled` flag; the `dex` longrun
   parks on `s6-pause`. The AIO TLS edge and public callback stay the same.
   Packaging forwards the issuer and fills the same defaults for omitted fields.

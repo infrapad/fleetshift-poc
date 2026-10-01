@@ -4,12 +4,16 @@ import {
   compose,
   composeDir,
   copySandboxCA,
+  checkOpenShiftDexMount,
+  configuredDexMode,
   ensurePodmanReady,
   importKeyValueArgs,
   rootDir,
 } from "./common.mjs";
 
 importKeyValueArgs(process.argv.slice(2));
+const dexMode = configuredDexMode();
+await checkOpenShiftDexMount(); // fail before building, not after an attempted container start
 await ensurePodmanReady();
 
 // Kind network is shared with locally provisioned clusters.
@@ -49,17 +53,15 @@ if (!process.env.OIDC_ISSUER_URL) {
     );
   }
   console.log(`
-  Built-in Dex sandbox IdP (no OIDC_ISSUER_URL set):
+  Peer Dex sandbox IdP (no OIDC_ISSUER_URL set):
     Issuer:  ${publicOrigin}/idp
-    Users:   ops@fleetshift.local / fleetshift-ops
-             dev@fleetshift.local / fleetshift-dev
+${dexMode === "openshift" ? "    Login:   OpenShift cluster via Dex (no demo users)" : `    Users:   ops@fleetshift.local / fleetshift-ops
+             dev@fleetshift.local / fleetshift-dev`}
 
   Open ${publicOrigin} and accept the browser certificate warning
   (unknown sandbox CA). Dex is same-origin under /idp; port 5556 is not published.
 
-  If this volume previously ran the old :5556 Dex issuer, reset it first:
-    npx nx run pd:clean
-
+${dexMode === "openshift" ? "  OpenShift mode uses its own /data volume; the demo volume remains untouched.\n" : "  If this demo volume previously ran the old :5556 Dex issuer, reset it first:\n    npx nx run pd:clean\n"}
   Configure fleetctl:
     bin/fleetctl auth setup \\
       --issuer-url ${publicOrigin}/idp \\

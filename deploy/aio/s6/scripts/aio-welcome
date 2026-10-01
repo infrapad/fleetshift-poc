@@ -23,7 +23,15 @@ if [ "$i" -ge 30 ]; then
 	exit 1
 fi
 
-if [ -f /run/fleetshift/dex.enabled ]; then
+if [ "${OPENSHIFT_DEX_MODE:-}" = openshift ]; then
+	cat <<EOF
+Open ${PUBLIC_ORIGIN}
+
+Login uses OpenShift through peer Dex (FleetShift OIDC issuer).
+The sandbox uses a local certificate. Your browser may ask you to accept it.
+Press Ctrl+C to stop FleetShift.
+EOF
+elif [ -f /run/fleetshift/dex.enabled ]; then
 	cat <<EOF
 
 

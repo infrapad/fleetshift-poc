@@ -23,6 +23,12 @@ npm install                          # from the FleetShift root; links the local
 npx nx run plugins:build             # built ESM/types/CSS via the Rspack plugin build
 ```
 
+To build the local images, run `npm exec -- nx run fleetshift-poc:image:build`.
+The web image uses the built sibling package as a Podman build context; rebuild
+`../infrapad/ui` first after changing it. A missing checkout or `dist/` will
+fail the image build. The container installs the file dependency as a copy so
+its dependencies resolve inside the image; local `npm install` still links it.
+
 For a local browser journey, start both services (Podman, docker-compose,
 [Task](https://taskfile.dev/), and the usual Go/Node prerequisites are needed):
 
