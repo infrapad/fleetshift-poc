@@ -1,0 +1,15 @@
+# Opt-in peer Dex OpenShift connector. Compose merges service volumes by
+# container destination: /data replaces the demo volume; the other mounts stay.
+# Keep the default named volume intact so reverting to demo is non-destructive.
+services:
+  fleetshift-server:
+    environment:
+      OPENSHIFT_DEX_MODE: openshift
+      OPENSHIFT_DEX_CONFIG_FILE: /run/fleetshift/openshift-dex/connector.json
+      EXTERNAL_UI_CONFIG: ${OPENSHIFT_UI_CONFIG:?Run pd:bootstrap-openshift-dex to generate public OAuth UI config}
+    volumes:
+      - fleetshift-openshift-data:/data
+      - ${OPENSHIFT_DEX_HOST_DIR:-../aio/.local/openshift-dex}:/run/fleetshift/openshift-dex:ro,Z
+
+volumes:
+  fleetshift-openshift-data:

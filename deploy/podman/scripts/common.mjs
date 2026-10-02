@@ -5,7 +5,10 @@ import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { readdir, stat } from "node:fs/promises";
 import { parseEnv } from "node:util";
-import { BootstrapError, bootstrapOpenShiftDex } from "./bootstrap-openshift-dex.mjs";
+import {
+  BootstrapError,
+  bootstrapOpenShiftDex,
+} from "./bootstrap-openshift-dex.mjs";
 
 $.verbose = true;
 
@@ -101,9 +104,13 @@ export function configuredDexMode(env = process.env, envFile) {
   // env_file values go directly into the container: without the OpenShift
   // overlay, a CLI demo override would still pass .env's openshift mode.
   if (fileMode === "openshift" && mode !== "openshift")
-    throw new Error("To return to demo, remove OPENSHIFT_DEX_MODE from .env first");
+    throw new Error(
+      "To return to demo, remove OPENSHIFT_DEX_MODE from .env first",
+    );
   if (mode !== "" && mode !== "demo" && mode !== "openshift")
-    throw new Error("Invalid OPENSHIFT_DEX_MODE; use openshift or omit it for demo Dex");
+    throw new Error(
+      "Invalid OPENSHIFT_DEX_MODE; use openshift or omit it for demo Dex",
+    );
   return mode === "openshift" ? "openshift" : "demo";
 }
 
@@ -122,13 +129,27 @@ export function composeFiles(env = process.env, envFile) {
   return files;
 }
 
-export async function checkOpenShiftDexMount(env = process.env, envFile, bootstrap = bootstrapOpenShiftDex) {
+export async function checkOpenShiftDexMount(
+  env = process.env,
+  envFile,
+  bootstrap = bootstrapOpenShiftDex,
+) {
   if (configuredDexMode(env, envFile) !== "openshift") return;
   const configured = composeEnvironment(envFile);
   if (env.OIDC_ISSUER_URL || configured.OIDC_ISSUER_URL)
-    throw new Error("OPENSHIFT_DEX_MODE=openshift conflicts with OIDC_ISSUER_URL; unset it in .env");
-  const hostDir = resolve(composeDir, env.OPENSHIFT_DEX_HOST_DIR ?? configured.OPENSHIFT_DEX_HOST_DIR ?? "../aio/.local/openshift-dex");
-  const invalidMount = () => new Error(`OpenShift Dex requires private connector.json and ca.crt under ${hostDir}; run npx nx run pd:bootstrap-openshift-dex to repair the mount`);
+    throw new Error(
+      "OPENSHIFT_DEX_MODE=openshift conflicts with OIDC_ISSUER_URL; unset it in .env",
+    );
+  const hostDir = resolve(
+    composeDir,
+    env.OPENSHIFT_DEX_HOST_DIR ??
+      configured.OPENSHIFT_DEX_HOST_DIR ??
+      "../aio/.local/openshift-dex",
+  );
+  const invalidMount = () =>
+    new Error(
+      `OpenShift mode requires private connector.json, ca.crt and ui-config.json under ${hostDir}; run npx nx run pd:bootstrap-openshift-dex to repair the mount`,
+    );
 
   let firstRun = false;
   try {
@@ -142,20 +163,24 @@ export async function checkOpenShiftDexMount(env = process.env, envFile, bootstr
   if (firstRun) {
     // Only a missing/empty directory is bootstrapped automatically. Never
     // overwrite partial credentials or repair unsafe permissions implicitly.
-    console.log("==> OpenShift Dex files absent; bootstrapping with the current host oc context");
+    console.log(
+      "==> OpenShift Dex files absent; bootstrapping with the current host oc context",
+    );
     try {
       await bootstrap({ outputDir: hostDir });
     } catch (error) {
       if (error instanceof BootstrapError)
         throw new Error(`OpenShift Dex bootstrap failed: ${error.message}`);
       // Do not log arbitrary oc/TLS errors: they may contain credentials.
-      throw new Error("OpenShift Dex bootstrap failed; check the oc context, CA, and cluster permissions");
+      throw new Error(
+        "OpenShift Dex bootstrap failed; check the oc context, CA, and cluster permissions",
+      );
     }
   }
   try {
     const dir = await stat(hostDir);
     if (!dir.isDirectory() || dir.mode & 0o077) throw invalidMount();
-    for (const name of ["connector.json", "ca.crt"]) {
+    for (const name of ["connector.json", "ca.crt", "ui-config.json"]) {
       const file = await stat(join(hostDir, name));
       if (!file.isFile() || file.mode & 0o077) throw invalidMount();
     }
@@ -165,6 +190,27 @@ export async function checkOpenShiftDexMount(env = process.env, envFile, bootstr
 }
 
 export function compose(...args) {
+  if (configuredDexMode() === "openshift") {
+    // Public endpoints only; the secret-bearing connector file is never
+    // exposed to Compose environment interpolation or /api/ui/config.
+    const configured = composeEnvironment();
+    const hostDir = resolve(
+      composeDir,
+      process.env.OPENSHIFT_DEX_HOST_DIR ??
+        configured.OPENSHIFT_DEX_HOST_DIR ??
+        "../aio/.local/openshift-dex",
+    );
+    try {
+      process.env.OPENSHIFT_UI_CONFIG = readFileSync(
+        join(hostDir, "ui-config.json"),
+        "utf8",
+      );
+    } catch {
+      throw new Error(
+        "OpenShift UI config missing; run npx nx run pd:bootstrap-openshift-dex",
+      );
+    }
+  }
   if (!process.env.COMPOSE_PROVIDER_CHECKED) {
     if (
       spawnSync("command", ["-v", "docker-compose"], {

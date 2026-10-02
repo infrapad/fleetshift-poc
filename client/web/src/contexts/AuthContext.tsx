@@ -100,6 +100,14 @@ function KeycloakAuthInner({ children }: { children: ReactNode }) {
   }, []);
 
   const logout = useCallback(() => {
+    // Embedded OpenShift access is independent of the Dex session. Remove it
+    // before clearing FleetShift login so it cannot survive a logout/login.
+    window.dispatchEvent(new Event("fleetshift:logout"));
+    try {
+      sessionStorage.removeItem("fleetshift:openshift-oauth");
+    } catch {
+      // Storage disabled; no token could have been retained there.
+    }
     setUser(null);
     fetchedForToken.current = undefined;
     void oidcRef.current.removeUser();

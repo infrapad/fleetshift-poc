@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Connecting to OpenShift</title>
+  </head>
+  <body>
+    <p>
+      Finishing OpenShift authorization… You can close this window if it does
+      not close automatically.
+    </p>
+    <script>
+      // Fragments are never sent to the FleetShift server. Remove the bearer
+      // from popup history before reporting it to the opener.
+      const params = new URLSearchParams(location.hash.slice(1));
+      history.replaceState(null, "", location.pathname);
+      const state = params.get("state");
+      const token = params.get("access_token");
+      const expiresIn = params.get("expires_in");
+      const error = params.get("error");
+      if (window.opener) {
+        window.opener.postMessage(
+          {
+            type: "fleetshift:openshift-oauth",
+            state,
+            ...(error || !token
+              ? { error: error || "OpenShift did not return an access token" }
+              : { accessToken: token, expiresIn }),
+          },
+          location.origin,
+        );
+        window.close();
+      }
+    </script>
+  </body>
+</html>

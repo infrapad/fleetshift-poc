@@ -113,6 +113,11 @@ const config: Configuration = {
       filename: "silent-renew.html",
       inject: false,
     }),
+    new rspack.HtmlRspackPlugin({
+      template: "./src/openshift-callback.html",
+      filename: "openshift-callback.html",
+      inject: false,
+    }),
     new rspack.DefinePlugin({
       "process.env.DRAGGABLE_DEBUG": "false",
     }),

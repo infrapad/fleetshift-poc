@@ -38,6 +38,47 @@ export function infrapadOrigin(config: unknown): string | null {
   return url.origin;
 }
 
+export interface OpenShiftOAuthConfig {
+  authorizeUrl: string;
+  clientId: string;
+  scope: string;
+}
+
+export function openshiftOAuthConfig(
+  config: unknown,
+): OpenShiftOAuthConfig | null {
+  const external = object(object(config)?.externalConfig);
+  if (!external || !Object.hasOwn(external, "openshiftOAuth")) return null;
+  const oauth = object(external.openshiftOAuth);
+  if (
+    typeof oauth?.authorizeUrl !== "string" ||
+    typeof oauth.clientId !== "string" ||
+    !oauth.clientId ||
+    typeof oauth.scope !== "string" ||
+    !oauth.scope
+  )
+    throw new Error("Invalid OpenShift OAuth configuration");
+  try {
+    const url = new URL(oauth.authorizeUrl);
+    if (
+      url.protocol !== "https:" ||
+      url.username ||
+      url.password ||
+      url.search ||
+      url.hash ||
+      !url.pathname.endsWith("/oauth/authorize")
+    )
+      throw new Error("invalid endpoint");
+  } catch {
+    throw new Error("Invalid OpenShift OAuth configuration");
+  }
+  return {
+    authorizeUrl: oauth.authorizeUrl,
+    clientId: oauth.clientId,
+    scope: oauth.scope,
+  };
+}
+
 function serviceUrl(value: unknown, origin: string): string {
   if (typeof value !== "string" || !value || value !== value.trim()) {
     throw new Error("Invalid InfraPad service URL in /ui/config");

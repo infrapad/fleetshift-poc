@@ -9,7 +9,9 @@ export function AdapterHarness({ token }: { token?: string }) {
       value={
         {
           isLoading: false,
-          user: token ? { access_token: token } : null,
+          user: token
+            ? { access_token: token, profile: { sub: "test-user" } }
+            : null,
         } as AuthContextProps
       }
     >

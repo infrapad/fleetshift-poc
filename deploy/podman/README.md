@@ -86,7 +86,16 @@ closed instead of being silently overwritten. To reconcile/rotate the client
 explicitly, run `npx nx run pd:bootstrap-openshift-dex`.
 
 The Compose overlay mounts this directory **read-only** and swaps `/data` to
-`fleetshift-openshift-data`; it does not copy credentials into `.env`. If you
+`fleetshift-openshift-data`; it does not copy credentials into `.env`.
+Bootstrap also registers a separate, public `fleetshift-infrapad` OAuthClient
+(`user:full`, no secret) with a `/app/openshift-callback.html` redirect, and
+writes public `ui-config.json` next to the private connector. The Compose
+launcher passes only that public JSON as `EXTERNAL_UI_CONFIG`, with InfraPad
+origin `https://localhost:8443` and the discovered OpenShift authorize URL.
+This replaces any `.env` `EXTERNAL_UI_CONFIG` **only in OpenShift mode**.
+If the private directory was generated before this feature, run
+`npx nx run pd:bootstrap-openshift-dex` once before restarting; a partial
+directory will not be silently repaired. If you
 used a custom bootstrap `--output-dir`, set `OPENSHIFT_DEX_HOST_DIR` to its
 **absolute host path** in `.env` or as a key-value argument. For API or OAuth
 route CA errors, run the bootstrap script explicitly with
@@ -104,7 +113,13 @@ manually after `pd:down`.
 Open https://fleetshift-sandbox.localhost:8085, accept the sandbox certificate
 warning, and sign in with your cluster user. The OpenShift connector client
 provides **Dex-issued** FleetShift tokens, not OpenShift user bearers for
-InfraPad or Thanos. The `fleetctl` setup above remains the same (the stack
+InfraPad or Thanos. In the embedded InfraPad view, click **Connect to
+OpenShift** to authorize the separate public client in a popup. With an active
+OpenShift session, no second password prompt should be needed (consent may
+still appear). The OpenShift bearer is held in this tab's session storage and
+cleared on FleetShift logout; the default demo setup continues to use the Dex
+token. Protected InfraPad/Thanos routing is tracked separately; acquiring a
+token alone does not enable those requests. The `fleetctl` setup above remains the same (the stack
 copies the current volume's sandbox CA to `.certs/ca.crt`).
 
 Point at an external issuer by setting `OIDC_ISSUER_URL` in `.env` (peer Dex
@@ -123,7 +138,7 @@ All local deployment commands use Nx `pd:*` targets.
 |------|-------------|
 | `podman:up` | Start the AIO stack (prebuilt image) |
 | `pd:dev` | Build the AIO image from source, then up (also supports opt-in OpenShift-backed Dex) |
-| `pd:bootstrap-openshift-dex` | Explicitly reconcile/rotate Dex's OpenShift OAuth client using the host `oc` context (first launch also bootstraps if files are absent) |
+| `pd:bootstrap-openshift-dex` | Explicitly reconcile Dex's OAuth client and the public embedded-UI OAuth client using the host `oc` context (first launch also bootstraps if files are absent) |
 | `podman:down` | Stop containers, preserve data |
 | `pd:clean` | Stop + delete demo volume and `.certs` (refuses while OpenShift mode selected) |
 | `podman:rebuild` | Stop, rebuild the AIO image, restart |
